@@ -1,0 +1,69 @@
+docker build -t zalowebhook .
+docker run -dit --name zalowebhook_container --network network_zalo_5kaquarium -p 9000:9000 zalowebhook
+
+
+
+
+
+docker run -d --name nginx_container -p 80:80 -p 443:443 -v ~/nginx/conf:/etc/nginx/conf.d nginx:latest
+
+docker run -d --name nginx_server --network network_zalo_5kaquarium -v ~/nginx/conf:/etc/nginx/conf.d -p 80:80 -p 443:443 nginx
+
+docker run -d --name nginx_server --network network_zalo_5kaquarium -v ~/nginx/conf:/etc/nginx/conf.d -v /etc/letsencrypt:/etc/letsencrypt:ro -p 80:80 -p 443:443 nginx
+
+server {
+
+    listen 80;
+
+    location /api/ {
+        proxy_pass http://nodeserver_container:3000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+server {
+    listen 80;
+    server_name zaloserver.5kaquarium.com;
+
+    location /api/ {
+        proxy_pass http://node_app:3000/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+
+docker run -d --name nginx_server --network network_zalo_5kaquarium -v /root/nginx/conf:/etc/nginx/conf.d -v /root/nginx/html:/usr/share/nginx/html -p 80:80 -p 443:443 nginx
+
+-cài đặt
+sudo apt update
+sudo apt install certbot
+sudo apt install python3-certbot-nginx
+
+-cài chứng chỉ
+sudo certbot certonly --webroot -w /root/nginx/html -d 5kaquarium.com -d www.5kaquarium.com
+sudo certbot --nginx -d 5kaquarium.com -d www.5kaquarium.com
+
+- vị trí chứng chỉ
+/etc/letsencrypt/live/5kaquarium.com/fullchain.pem
+/etc/letsencrypt/live/5kaquarium.com/privkey.pem
+
+
+sudo certbot --nginx -d zalowebhook.5kaquarium.com
+server {
+    listen 443 ssl;
+    server_name zalowebhook.5kaquarium.com;
+
+    ssl_certificate /etc/letsencrypt/live/zalowebhook.5kaquarium.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/zalowebhook.5kaquarium.com/privkey.pem;
+
+    location /zalo/webhook {
+        proxy_pass http://zalowebhook_container:9000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
