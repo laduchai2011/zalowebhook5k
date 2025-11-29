@@ -2,10 +2,13 @@ import express, { Router } from 'express';
 import dotenv from 'dotenv';
 import Handle_Zalo_WebHook from './handle';
 import { storeTokenZalo } from './storeTokenZalo';
+import { ListenerMessage } from './handle/ListenerMessage';
 
 dotenv.config();
 
 storeTokenZalo();
+
+ListenerMessage();
 
 const service_zalo_webhook: Router = express.Router();
 

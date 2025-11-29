@@ -9,8 +9,7 @@ async function storeTokenZalo(){
     await serviceRedis.init();
 
     const tokenZalo: TokenZaloField = {
-        access_token_message: process.env.ZALO_ACCESS_TOKEN_MESSAGE || '',
-        access_token_infor: process.env.ZALO_ACCESS_TOKEN_INFOR || '',
+        access_token: process.env.ZALO_ACCESS_TOKEN || '',
         refresh_token: process.env.ZALO_REFRESH_TOKEN || ''
     }
 

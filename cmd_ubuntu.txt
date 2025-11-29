@@ -37,6 +37,7 @@ server {
 
 
 docker run -d --name nginx_server --network network_zalo_5kaquarium -v /root/nginx/conf:/etc/nginx/conf.d -v /root/nginx/html:/usr/share/nginx/html -p 80:80 -p 443:443 nginx
+nano /root/nginx/conf/default.conf
 
 -cài đặt
 sudo apt update
