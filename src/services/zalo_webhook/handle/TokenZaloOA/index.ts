@@ -82,6 +82,8 @@ export async function refreshAccessToken() {
         console.error('REFRESH ERROR:', err.response?.data || err);
         await lock.release();
     }
+
+    await lock.release();
 }
 
 // export async function getAccessTokenInfor() {

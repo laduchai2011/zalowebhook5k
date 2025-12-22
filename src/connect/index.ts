@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 import REDIS_Server from './redis';
 import { serviceRedlock } from './redlock';
+import { RabbitMQ } from '@src/connect/rabbitMQ';
 
 dotenv.config();
 
@@ -10,11 +11,13 @@ const isProduct = NODE_ENV === 'production';
 
 
 const redis_server = REDIS_Server.getInstance();
+const rabbit_server = RabbitMQ.getInstance();
 
 const shutdown = async (signal: string) => {
     try {
         console.log(`Received ${signal}. Closing Redis...`);
         await redis_server.close(); // hoặc disconnect() nếu dùng ioredis
+        await rabbit_server.close();
         console.log('Redis closed. Exiting now.');
     } catch (err) {
         console.error('Error during shutdown:', err);
@@ -29,4 +32,4 @@ if (isProduct) {
     process.on('SIGINT', () => shutdown('SIGINT')); // khi nhấn Ctrl+C
 }
 
-export { redis_server, serviceRedlock };
+export { redis_server, serviceRedlock, rabbit_server };

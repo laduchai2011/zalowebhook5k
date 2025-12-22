@@ -7,7 +7,7 @@ import cors from 'cors';
 dotenv.config();
 
 import service_zalo_webhook from '@src/services/zalo_webhook'; 
-import service_image from './services/image';
+// import service_image from './services/image';
 
 const app: Express = express();
 const port = process.env.PORT || 9000;
@@ -51,7 +51,7 @@ app.use('/api/hello', (req, res) => {
 
 
 app.use('/api/service_zalo_webhook', service_zalo_webhook);
-app.use('/api/service_image', service_image);
+// app.use('/api/service_image', service_image);
 
 app.listen(port, () => {
     console.log(`[server]: Server is running at http://localhost:${port}`);
