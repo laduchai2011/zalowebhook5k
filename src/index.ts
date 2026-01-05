@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import process from 'process';
 import cors from 'cors';
+// import { mssql_server } from '@src/connect';
+
+// mssql_server.init();
 
 dotenv.config();
 
@@ -10,7 +13,7 @@ import service_zalo_webhook from '@src/services/zalo_webhook';
 // import service_image from './services/image';
 
 const app: Express = express();
-const port = process.env.PORT || 9000;
+const port = process.env.PORT || 5000;
 
 app.use(cookieParser());
 app.use('/api', express.json());

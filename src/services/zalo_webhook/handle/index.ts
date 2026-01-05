@@ -14,7 +14,7 @@ class Handle_Zalo_WebHook {
 
     getData = async (req: Request, res: Response) => {
         
-        // console.log(1111111, req.query)
+        console.log('Zalo_WebHook', 'getData', req.query)
         const { verify_token } = req.query;
 
         if (verify_token === VERIFY_TOKEN) {

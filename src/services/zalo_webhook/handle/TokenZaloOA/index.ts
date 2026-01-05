@@ -1,61 +1,47 @@
 import axios from 'axios';
 import qs from 'qs';
+import { Lock } from 'redlock';
 import { serviceRedlock } from '@src/connect';
 import ServiceRedis from '@src/cache/cacheRedis';
 import { TokenZaloField, TokenResField } from '@src/dataStruct/tokenZalo';
 import { redisKey_storeTokenZalo, redisKey_storeTokenZalo_lock } from '@src/const/zalo';
+import { mssqlGetValue, mssqlUpdateValue } from "@src/cache/cacheMssql";
+
 
 const serviceRedis = ServiceRedis.getInstance();
+serviceRedis.init();
 
 const timeExpireat = 60 * 60 * 24 * 30 * 12;
 
-export async function getAccessToken() {
-    await serviceRedis.init();
+export async function getAccessToken(): Promise<string | null> { 
     const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
+    // return zaloToken?.access_token ?? null;
+    if (!zaloToken) {
+        console.error('getAccessToken', 'Failed to get token in Redis');
+        return null;
+    }
+
     return zaloToken.access_token;
 }
 
-export async function refreshAccessToken() {
-    // // console.log('🔄 Refreshing Zalo OA token...');
-
-    // await serviceRedis.init();
-    // const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
-
-    // const url = `https://oauth.zaloapp.com/v4/oa/access_token?refresh_token=${zaloToken.refresh_token}`;
-
-    // const res = await axios.get<TokenResField>(url);
-
-    // const newToken = res.data.access_token;
-    // const newRefresh = res.data.refresh_token;
-
-    // zaloToken.access_token_message = newToken;
-    // zaloToken.refresh_token = newRefresh;
-
-    // await serviceRedis.setData<TokenZaloField>(redisKey_storeTokenZalo, zaloToken, timeExpireat);
-
-    // // console.log('✅ Token refreshed OK');
-
-    // return newToken;
-    // console.log('🔄 Refreshing Zalo OA token...');
-
-    await serviceRedis.init();
-
-    const lock = await serviceRedlock.acquire([redisKey_storeTokenZalo_lock], 30000);
-
-    const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
-
-    // const url = `https://oauth.zaloapp.com/v4/oa/access_token?refresh_token=${zaloToken.refresh_token}`;
-
-    // const res = await axios.get<TokenResField>(url);
-
-    const body = qs.stringify({
-        app_id: '2474292114893114248',
-        grant_type: 'refresh_token',
-        refresh_token: zaloToken.refresh_token,
-        // code: "6aB5KTVRPdSmP_jYz_X3I1rCqbUnnr1RQdsiU_Vj7t0BGwnWq_yqTcD8jMAOn1vmEKMKPEEzHtX1EyjDk9LnN6iWwKgxW65f4Id_TgUYTsXUA8vH-ge2CXSXd5gPrbuJ1HZv1U6LImOkHPvEbeecUKrkkKImtmfQSNAnOBVf0cC5OgHXlPflFGP7yq_nl2Kt4nQL9Toe2204JCXNrBmMK6nfn1VUyKXbA2gOGCNsSnTB5hqTYeq7461ojMxzc6yaIrBDa-pYSxzJtJESXMYlZqt-5EoMGxBd6_i9p-n0WjGv93xkQfZKwuKLV-LrNoR6l-Aqp7ORMCFaXy7n9MadsxtSxTOJU1QYeu2zn4rl2hjUMIRrFjuzY_nwNG",
-    });
+export async function refreshAccessToken(): Promise<string | null> {
+    let lock: Lock | null = null;
 
     try {
+        lock = await serviceRedlock.acquire([redisKey_storeTokenZalo_lock], 30000);
+
+        const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
+        if (!zaloToken) {
+            console.error('refreshAccessToken', 'Failed to get token in Redis');
+            return handleWhenRedisRestart();
+        }
+
+        const body = qs.stringify({
+            app_id: '2474292114893114248',
+            grant_type: 'refresh_token',
+            refresh_token: zaloToken.refresh_token,
+        });
+
         const res = await axios.post<TokenResField>('https://oauth.zaloapp.com/v4/oa/access_token', body, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -63,75 +49,84 @@ export async function refreshAccessToken() {
             },
         });
 
-        // console.log('NEW ACCESS TOKEN:', res.data);
-
         const newToken = res.data.access_token;
         const newRefresh = res.data.refresh_token;
+
+        if (!(newToken && newRefresh)) {
+            console.error('Failed to get new access token and refresh token');
+            return null;
+        }
 
         zaloToken.access_token = newToken;
         zaloToken.refresh_token = newRefresh;
 
-        await serviceRedis.setData<TokenZaloField>(redisKey_storeTokenZalo, zaloToken, timeExpireat);
+        const resultupdate = await mssqlUpdateValue(redisKey_storeTokenZalo, JSON.stringify(zaloToken));
+        if (!resultupdate?.isSuccess) {
+            console.error('Failed mssqlUpdateValue refresh token (zalo token)');
+            return null;
+        }
 
-        // console.log('✅ Token refreshed OK');
+        const isSet = await serviceRedis.setDataAgain<TokenZaloField>(redisKey_storeTokenZalo, zaloToken);
+        if (!isSet) {
+            console.error('Failed to set new token in Redis');
+            return null;
+        }
 
-        await lock.release();
         return newToken;
-        // return res.data;
     } catch (err: any) {
         console.error('REFRESH ERROR:', err.response?.data || err);
-        await lock.release();
+        return null;
+    } finally {
+        if (lock) {
+            await lock.release();
+        }
     }
-
-    await lock.release();
 }
 
-// export async function getAccessTokenInfor() {
-//     await serviceRedis.init();
-//     const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
-//     return zaloToken.access_token;
-// }
+async function handleWhenRedisRestart() {
+    const resultget = await mssqlGetValue(redisKey_storeTokenZalo);
 
-// export async function refreshAccessTokenInfor() {
-//     // console.log('🔄 Refreshing Zalo OA token...');
+    if (resultget.isSuccess) {
+        const zaloToken = JSON.parse(resultget.data?.value!) as TokenResField;
+        const body = qs.stringify({
+            app_id: '2474292114893114248',
+            grant_type: 'refresh_token',
+            refresh_token: zaloToken.refresh_token,
+        });
 
-//     await serviceRedis.init();
-//     const zaloToken = await serviceRedis.getData<TokenZaloField>(redisKey_storeTokenZalo);
+        const res = await axios.post<TokenResField>('https://oauth.zaloapp.com/v4/oa/access_token', body, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                Secret_key: '7XFkowzBCeRBRGqDhUkL',
+            },
+        });
 
-//     // const url = `https://oauth.zaloapp.com/v4/oa/access_token?refresh_token=${zaloToken.refresh_token}`;
+        const newToken = res.data.access_token;
+        const newRefresh = res.data.refresh_token;
 
-//     // const res = await axios.get<TokenResField>(url);
+        if (!(newToken && newRefresh)) {
+            console.error('Failed to get new access token and refresh token');
+            return null;
+        }
 
-//     const body = qs.stringify({
-//         app_id: '2474292114893114248',
-//         grant_type: 'refresh_token',
-//         refresh_token: zaloToken.refresh_token,
-//         // code: "6aB5KTVRPdSmP_jYz_X3I1rCqbUnnr1RQdsiU_Vj7t0BGwnWq_yqTcD8jMAOn1vmEKMKPEEzHtX1EyjDk9LnN6iWwKgxW65f4Id_TgUYTsXUA8vH-ge2CXSXd5gPrbuJ1HZv1U6LImOkHPvEbeecUKrkkKImtmfQSNAnOBVf0cC5OgHXlPflFGP7yq_nl2Kt4nQL9Toe2204JCXNrBmMK6nfn1VUyKXbA2gOGCNsSnTB5hqTYeq7461ojMxzc6yaIrBDa-pYSxzJtJESXMYlZqt-5EoMGxBd6_i9p-n0WjGv93xkQfZKwuKLV-LrNoR6l-Aqp7ORMCFaXy7n9MadsxtSxTOJU1QYeu2zn4rl2hjUMIRrFjuzY_nwNG",
-//     });
+        zaloToken.access_token = newToken;
+        zaloToken.refresh_token = newRefresh;
 
-//     try {
-//         const res = await axios.post<TokenResField>('https://oauth.zaloapp.com/v4/oa/access_token', body, {
-//             headers: {
-//                 'Content-Type': 'application/x-www-form-urlencoded',
-//                 Secret_key: '7XFkowzBCeRBRGqDhUkL',
-//             },
-//         });
+        const resultupdate = await mssqlUpdateValue(redisKey_storeTokenZalo, JSON.stringify(zaloToken));
+        if (!resultupdate?.isSuccess) {
+            console.error('Failed mssqlUpdateValue refresh token (zalo token)');
+            return null;
+        }
 
-//         // console.log('NEW ACCESS TOKEN:', res.data);
+        const isSet = await serviceRedis.setData<TokenZaloField>(redisKey_storeTokenZalo, zaloToken, timeExpireat);
+        if (!isSet) {
+            console.error('Failed to set new token in Redis');
+            return null;
+        }
 
-//         const newToken = res.data.access_token;
-//         const newRefresh = res.data.refresh_token;
-
-//         zaloToken.access_token = newToken;
-//         zaloToken.refresh_token = newRefresh;
-
-//         await serviceRedis.setData<TokenZaloField>(redisKey_storeTokenZalo, zaloToken, timeExpireat);
-
-//         // console.log('✅ Token refreshed OK');
-
-//         return newToken;
-//         // return res.data;
-//     } catch (err: any) {
-//         console.error('REFRESH ERROR:', err.response?.data || err);
-//     }
-// }
+        return newToken;
+    } else {
+        console.log('handleWhenRedisRestart', 'mssqlGetValue failure')
+        return null;
+    }
+}

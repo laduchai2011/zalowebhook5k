@@ -1,5 +1,5 @@
 import { consumeMessage } from "@src/messageQueue/Consumer";
-import { sendMessageTD } from "@src/messageQueue/Producer";
+// import { sendMessageTD } from "@src/messageQueue/Producer";
 import { sendMessageToUser } from "../MessageToUser";
 import { MessageField, messageType_enum } from "@src/dataStruct/message";
 import { HookDataField, MessageTextField, ZaloMessage, MessageImagesField, MessageVideoField, HookDataFieldToSend } from "@src/dataStruct/hookData";
@@ -15,7 +15,7 @@ async function ListenerMessage () {
         // const messageText: MessageTextField = hookData.message;
         // sendTextMessageToUser(hookData.recipient.id, messageText.text)
         const mesType = resData.type
-        console.log('ListenerMessage', hookData, mesType)
+        // console.log('ListenerMessage', hookData, mesType)
         switch(mesType) { 
             case messageType_enum.TEXT: { 
                 const hookDataFieldToSend = {recipient: {user_id: hookData.recipient.id}, message: hookData.message} as HookDataFieldToSend<MessageTextField>
@@ -24,24 +24,24 @@ async function ListenerMessage () {
             } 
             case messageType_enum.IMAGES: { 
                 const hookDataFieldToSend = {recipient: {user_id: hookData.recipient.id}, message: hookData.message} as HookDataFieldToSend<MessageImagesField>
-                console.log('ListenerMessage', messageType_enum.IMAGES, hookData.recipient.id, hookDataFieldToSend.message.attachment.payload)
+                // console.log('ListenerMessage', messageType_enum.IMAGES, hookData.recipient.id, hookDataFieldToSend.message.attachment.payload)
                 sendMessageToUser(hookDataFieldToSend);
                 break; 
             } 
-             case messageType_enum.VIDEOS: { 
-                // const hookDataFieldToSend = {recipient: {user_id: hookData.recipient.id}, message: hookData.message} as HookDataFieldToSend<MessageImagesField>
-                // console.log('ListenerMessage', messageType_enum.IMAGES, hookData.recipient.id, hookDataFieldToSend.message.attachment.payload)
-                // sendMessageToUser(hookDataFieldToSend);
-                const hookData1 = hookData as HookDataField<MessageVideoField>
-                const fileName2 = new URL(hookData1.message.attachment.payload.elements[0].url).searchParams.get('id');
-                sendMessageTD('send_videoTD', {
-                    receiveId: hookData.recipient.id,
-                    oaid: OAID,
-                    name: fileName2,
-                    accountId: hookData.sender.id
-                })
-                break; 
-            } 
+            // case messageType_enum.VIDEOS: { 
+            //     // const hookDataFieldToSend = {recipient: {user_id: hookData.recipient.id}, message: hookData.message} as HookDataFieldToSend<MessageImagesField>
+            //     // console.log('ListenerMessage', messageType_enum.IMAGES, hookData.recipient.id, hookDataFieldToSend.message.attachment.payload)
+            //     // sendMessageToUser(hookDataFieldToSend);
+            //     const hookData1 = hookData as HookDataField<MessageVideoField>
+            //     const fileName2 = new URL(hookData1.message.attachment.payload.elements[0].url).searchParams.get('id');
+            //     sendMessageTD('send_videoTD', {
+            //         receiveId: hookData.recipient.id,
+            //         oaid: OAID,
+            //         name: fileName2,
+            //         accountId: hookData.sender.id
+            //     })
+            //     break; 
+            // } 
             default: { 
                 //statements; 
                 break; 
